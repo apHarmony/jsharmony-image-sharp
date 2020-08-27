@@ -1,6 +1,6 @@
 {
   "name": "jsharmony-image-sharp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "jsHarmony Image Extension for Sharp libvips",
   "main": "index.js",
   "scripts": {

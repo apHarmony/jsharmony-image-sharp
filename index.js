@@ -20,6 +20,7 @@ along with this package.  If not, see <http://www.gnu.org/licenses/>.
 var _ = require('lodash');
 var fs = require('fs');
 var sharp = require('sharp');
+sharp.cache(false);
 
 exports = module.exports = {};
 
@@ -56,6 +57,10 @@ exports.driver = function(){
   return sharp;
 }
 
+exports.getDriver = function(cb){
+  return cb(null, exports.driver());
+}
+
 exports.resample = function(src, dest, format, callback){
   var img = sharp(src);
 
@@ -89,7 +94,7 @@ exports.resample = function(src, dest, format, callback){
         img.toFormat('png', pngOptions);
       }
       else if(_.includes(['jpeg', 'jpg'], format)){
-        img.toFormat('jpeg', { quality: 90  });
+        img.toFormat('jpeg', { quality: 90, chromaSubsampling: '4:4:4'  });
         img.flatten({ background:'#ffffff' });
       }
       else if(_.includes(['tif', 'tiff'], format)){
@@ -133,7 +138,7 @@ exports.crop = function(src, dest, destsize, format, callback){
         img.toFormat('png', pngOptions);
       }
       else if(_.includes(['jpeg', 'jpg'], format)){
-        img.toFormat('jpeg', { quality: 90  });
+        img.toFormat('jpeg', { quality: 90, chromaSubsampling: '4:4:4'  });
         img.flatten({ background:'#ffffff' });
       }
       else if(_.includes(['tif', 'tiff'], format)){
@@ -183,7 +188,7 @@ exports.resize = function(src, dest, destsize, format, callback){
         img.toFormat('png', pngOptions);
       }
       else if(_.includes(['jpeg', 'jpg'], format)){
-        img.toFormat('jpeg', { quality: 90  });
+        img.toFormat('jpeg', { quality: 90, chromaSubsampling: '4:4:4'  });
         img.flatten({ background:'#ffffff' });
       }
       else if(_.includes(['tif', 'tiff'], format)){
