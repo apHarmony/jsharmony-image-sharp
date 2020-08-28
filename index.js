@@ -24,6 +24,8 @@ sharp.cache(false);
 
 exports = module.exports = {};
 
+exports.type = 'jsharmony-image-sharp';
+
 function copyFile(source, target, cb) {
   var cbCalled = false;
   var rd = fs.createReadStream(source);
@@ -36,6 +38,11 @@ function copyFile(source, target, cb) {
   function done(err) {
     if (!cbCalled) { if (typeof err == 'undefined') err = null; cb(err); cbCalled = true; }
   }
+};
+
+function execif(cond, apply, f){
+  if (cond) apply(f);
+  else f();
 };
 
 exports.init = function(callback){
@@ -106,9 +113,11 @@ exports.resample = function(src, dest, format, callback){
     else format = srcformat;
     img.rotate();
     
-    img.toFile(dest, function(err){
+    img.toBuffer(function(err, buffer) {
       if (err) return callback(err);
-      return callback(null);
+      fs.writeFile(dest, buffer, function(err) {
+        return callback(err);
+      });
     });
   }).catch(function(err){ return callback(err); });
 };
@@ -152,11 +161,47 @@ exports.crop = function(src, dest, destsize, format, callback){
     
     var dstWidth = destsize[0];
     var dstHeight = destsize[1];
-    img.resize(dstWidth, dstHeight, { fit: 'cover' });
+    var dstParams = {
+      resize: true,
+      x: 0,
+      y: 0,
+      trim: false,
+    };
+    if(destsize.length > 2) dstParams = _.extend(dstParams, destsize[2]);
 
-    img.toFile(dest, function(err){
+    dstParams.x = dstParams.x || 0;
+    dstParams.y = dstParams.y || 0;
+    dstWidth = dstWidth || (info.width - dstParams.x);
+    dstHeight = dstHeight || (info.height - dstParams.y);
+
+    if(dstParams.resize) img.resize(dstWidth, dstHeight, { fit: 'cover' });
+    else {
+      img.extract({
+        left: dstParams.x,
+        top: dstParams.y,
+        width: dstWidth,
+        height: dstHeight
+      });
+    }
+
+    img.toBuffer(function(err, buffer) {
       if (err) return callback(err);
-      return callback(null);
+
+      execif(dstParams.trim,
+        function(f){
+          img = sharp(buffer);
+          img.trim();
+          img.toBuffer().then(function(_buffer) {
+            buffer = _buffer;
+            f();
+          }).catch(function(err){ return callback(err); });
+        },
+        function(){
+          fs.writeFile(dest, buffer, function(err) {
+            return callback(err);
+          });
+        }
+      );
     });
   }).catch(function(err){ return callback(err); });
 }
@@ -229,9 +274,11 @@ exports.resize = function(src, dest, destsize, format, callback){
 
     if(!noresize) img.resize(dstWidth, dstHeight, resizeOptions);
 
-    img.toFile(dest, function(err){
+    img.toBuffer(function(err, buffer) {
       if (err) return callback(err);
-      return callback(null);
+      fs.writeFile(dest, buffer, function(err) {
+        return callback(err);
+      });
     });
   }).catch(function(err){ return callback(err); });
 }
