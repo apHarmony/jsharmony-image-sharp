@@ -282,3 +282,12 @@ exports.resize = function(src, dest, destsize, format, callback){
     });
   }).catch(function(err){ return callback(err); });
 }
+
+exports.compare = function(src1, src2, options, callback /* (err, isEqual, equality) */){
+  options = _.extend({
+    diff: null,
+    tolerance: 0.05,
+  }, options);
+  
+  return callback(new Error('jsharmony-image-sharp compare is not implemented'));
+};
