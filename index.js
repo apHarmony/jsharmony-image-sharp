@@ -288,6 +288,27 @@ exports.compare = function(src1, src2, options, callback /* (err, isEqual, equal
     diff: null,
     tolerance: 0.05,
   }, options);
+
+  /*
+  1. difference
+  2. >>> recomb
+     >>> threshold
+   
+ 
+      <r g b>
+ 
+       a b c
+      <d e f>
+       g h i
+ 
+      <r*a + g*d + b*g, r*b + g*e + b*h, r*c + g*f + b*i>
+ 
+       1 0 0
+      <1 0 0>
+       1 0 0
+ 
+  3. over or add
+  */
   
   return callback(new Error('jsharmony-image-sharp compare is not implemented'));
 };
