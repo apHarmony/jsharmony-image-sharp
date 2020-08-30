@@ -308,6 +308,7 @@ exports.compare = function(src1, src2, options, callback /* (err, isEqual, equal
        1 0 0
  
   3. over or add
+  4. Use stats to get average or total of channel
   */
   
   return callback(new Error('jsharmony-image-sharp compare is not implemented'));
