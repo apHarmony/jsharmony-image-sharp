@@ -55,9 +55,9 @@ exports.init = function(callback){
     }
   });
   
-  img.toBuffer().then(function(){
-    return callback();
-  }).catch(function(err){ return callback(err); });
+  img.toBuffer().then(function(buffer){})
+  .catch(function(err){ return callback(err);})
+  .finally(function(){ return callback(); });
 }
 
 exports.driver = function(){
