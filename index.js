@@ -20,6 +20,7 @@ along with this package.  If not, see <http://www.gnu.org/licenses/>.
 var _ = require('lodash');
 var fs = require('fs');
 var sharp = require('sharp');
+const transform = require('./transform.js');
 sharp.cache(false);
 
 exports = module.exports = {};
@@ -313,3 +314,20 @@ exports.compare = function(src1, src2, options, callback /* (err, isEqual, equal
   
   return callback(new Error('jsharmony-image-sharp compare is not implemented'));
 };
+
+/**
+ * @param {string} src
+ * @param {import('./transform').TransformOptions} transforms
+ * @param {(error: any, buffer: Buffer | undefined, format: string | undefined) => void} callback
+ */
+exports.transform = function(src, transforms, callback) {
+  transform.transform(src, transforms).then(data => {
+    data.sharp.toBuffer((err, buffer) => {
+      if (err) {
+        callback(err, undefined, undefined);
+      } else {
+        callback(undefined, buffer, data.format);
+      }
+    });
+  });
+}
