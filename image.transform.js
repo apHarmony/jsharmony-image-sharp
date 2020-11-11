@@ -36,10 +36,10 @@ const _ = require('lodash');
 
 /**
  * @typedef {object} TransformCropOptions
- * @property {number} x
- * @property {number} y
- * @property {number} width
- * @property {number} height
+ * @property {number} x - proportional to image width [0, 1]
+ * @property {number} y - proportional to image height [0, 1]
+ * @property {number} width - proportional to image width [0, 1]
+ * @property {number} height - proportional to image height [0, 1]
  */
 
 /**
@@ -58,61 +58,61 @@ const _ = require('lodash');
 
 /**
  * @param {string} src
+ * @param {string | undefined} format - specify the output format of the image. If empty, the output
  * @param {TransformOptions} transforms
- * @returns {Promise<{sharp: sharp.Sharp, format: string}>}
+ * @returns {Promise<sharp.Sharp}>}
  */
-exports.transform = function(src, transforms) {
+exports.transform = function(src, format, transforms) {
 
-  // No mutating!
-  transforms = _.extend({}, transforms);
 
-  /** @type {sharp.Metadata} */
-  let metadata = undefined;
+  let image = sharp(src);
 
-  // Order of operations is very important here.
-  // In all cases, order must be consistent, and in
-  // some cases, sharp will perform operations
-  // in a set order regardless of how they are ordered here.
-  // Do not change order without a lot of testing!
-  const inputImage = sharp(src);
-  return inputImage.metadata().then(data => {
-    metadata = data;
-    return toRaw(inputImage);
-  })
-  .then(image => {
-    return transforms.crop ?
+  return image.metadata().then(metadata => {
+
+    transforms = preprocessTransforms(transforms, metadata);
+
+    if (format === 'png') {
+      const pngOptions = { compressionLevel: 9  };
+      if(_.includes(['jpeg', 'jpg'], metadata.format)) pngOptions.adaptiveFiltering = true;
+      image.toFormat('png', pngOptions);
+    } else if (_.includes(['jpeg', 'jpg'], format)) {
+      image.toFormat('jpeg', { quality: 90, chromaSubsampling: '4:4:4'  });
+      image.flatten({ background:'#ffffff' });
+    } else if (_.includes(['tif', 'tiff'], format)) {
+      image.toFormat('tiff');
+      image.flatten({ background:'#ffffff' });
+    } else if (format) {
+      image.toFormat(format);
+    }
+
+    // Order of operations is very important here.
+    // In all cases, order must be consistent, and in
+    // some cases, sharp will perform operations
+    // in a set order regardless of how they are ordered here.
+    // Do not change order without a lot of testing!
+    // Also, may need to change preprocessTransforms() function if order changes.
+
+
+    image = transforms.crop ?
       crop(image, transforms.crop.x, transforms.crop.y, transforms.crop.width, transforms.crop.height) : image;
-  })
-  .then(image => transforms.resize ? resize(image, transforms.resize.width, transforms.resize.height) : image)
-  // Flipping and rotation HAS to be done in a very specific way.
-  // This is a case where sharp will override order.
-  // This also needs to match the expected behavior in the client.
-  // Be very careful here and test rotation/flipping a lot (in the client) if
-  // you change this.
-  .then(image => transforms.flip_horizontal ? flipHorizontal(image) : image)
-  .then(image => transforms.flip_vertical ? flipVertical(image) : image)
-  .then(image => transforms.rotate ? rotate(image, transforms.rotate) : image)
-  .then(image => transforms.levels ? levels(image, transforms.levels.r, transforms.levels.g, transforms.levels.b) : image)
-  .then(image => {
-    image = transforms.invert ? image.negate() : image;
+
+    image = transforms.resize ? resize(image, transforms.resize.width, transforms.resize.height) : image;
+
+    // Always perform rotation even if rotation is 0!
+    // This removes EXIF data.
+    image = rotate(image, transforms.rotate || 0);
+
+    image = transforms.flip_horizontal ? flipHorizontal(image) : image;
+    image = transforms.flip_vertical ? flipVertical(image) : image;
+    image = transforms.sharpen ? sharpen(image, transforms.sharpen) : image;
+    image = transforms.levels ? levels(image, transforms.levels.r, transforms.levels.g, transforms.levels.b) : image;
     image = transforms.brightness ? brightness(image, transforms.brightness) : image;
     image = transforms.contrast ? contrast(image, transforms.contrast) : image;
+    image = transforms.invert ? image.negate() : image;
     image = transforms.gamma ? gamma(image, transforms.gamma) : image;
-    image = transforms.sharpen ? sharpen(image, transforms.sharpen) : image;
 
-    return {
-      format: metadata.format,
-      sharp: image.toFormat(metadata.format)
-    };
+    return image;
   });
-}
-
-/**
- * @param {sharp.Sharp} image
- * @returns {Promise<sharp.Sharp>}
- */
-function apply(image) {
-  return toRaw(image);
 }
 
 /**
@@ -172,18 +172,18 @@ function crop(image, left, top, width, height) {
 
 /**
  * @param {sharp.Sharp} image
- * @returns {Promise<sharp.Sharp>}
+ * @returns {sharp.Sharp}
  */
 function  flipHorizontal(image) {
-  return apply(image.flop());
+  return image.flop(true);
 }
 
 /**
  * @param {sharp.Sharp} image
- * @returns {Promise<sharp.Sharp>}
+ * @returns {sharp.Sharp}
  */
 function  flipVertical(image) {
-  return apply(image.flip());
+  return image.flip(true);
 }
 
 /**
@@ -202,7 +202,7 @@ function gamma(image, gamma) {
  * @param {number} red - -1...1
  * @param {number} green - -1...1
  * @param {number} blue - -1...1
- * @returns {Promise<sharp.Sharp>}
+ * @returns {sharp.Sharp}
  */
 function levels(image, red, green, blue) {
 
@@ -213,46 +213,101 @@ function levels(image, red, green, blue) {
 
   if (!hasLevelChange) return image;
 
-  return image.raw().toBuffer({ resolveWithObject: true }).then(result => {
-    if (result.info.channels == 3) {
-      // Order must match rgb channel order!
-      const factors = [
-        clamp(red, -1, 1) + 1,
-        clamp(green, -1, 1) + 1,
-        clamp(blue, -1, 1) + 1
-      ];
-
-      for (let i = 0; i < result.data.length; i++) {
-        const channel = i % result.info.channels;
-        if (channel < 3) {
-          result.data[i] = Math.min(255, result.data[i] * factors[channel]);
-        }
-      }
+  const factors = _.map([
+    clamp(red, -1, 1),
+    clamp(green, -1, 1),
+    clamp(blue, -1, 1)
+  ], factor => {
+    if (factor < 0) {
+      return 1 + factor;
     }
-
-    return sharp(result.data, {
-      raw: {
-        channels: result.info.channels,
-        height: result.info.height,
-        width: result.info.width,
-      }
-    })
+    return 1 + factor * 5;
   });
+
+  const levelMatrix = [
+    [factors[0], 0, 0],
+    [0, factors[1], 0],
+    [0, 0, factors[2]]
+  ];
+
+  image.recomb(levelMatrix);
+  return image;
+}
+
+/**
+ * @param {TransformOptions} transforms
+ * @param {sharp.Metadata} metadata
+ * @returns {TransformOptions}
+ */
+function preprocessTransforms(transforms, metadata) {
+
+  // No mutating!
+  transforms = _.extend({}, transforms);
+
+  if (transforms.flip_horizontal && transforms.flip_vertical) {
+    const rotation = transforms.rotate || 0;
+    transforms.rotate = (rotation + 180) % 360;
+    transforms.flip_horizontal = false;
+    transforms.flip_vertical = false;
+  }
+
+  const isSideways = transforms.rotate === 90 || transforms.rotate === 270;
+  if (isSideways && transforms.resize) {
+    // No mutating!
+    transforms.resize = _.extend({}, transforms.resize);
+    const tempHeight = transforms.resize.height;
+    transforms.resize.height = transforms.resize.width;
+    transforms.resize.width = tempHeight;
+  }
+
+  if (isSideways) {
+    const tempFlipHorizontal = transforms.flip_horizontal;
+    transforms.flip_horizontal = transforms.flip_vertical;
+    transforms.flip_vertical = tempFlipHorizontal;
+  }
+
+  if (transforms.crop) {
+    const validCrop =
+      // Validate height
+      transforms.crop.height > 0 &&
+      (transforms.crop.height + transforms.crop.y) <= 1 &&
+      // Validate width
+      transforms.crop.width > 0 &&
+      (transforms.crop.width + transforms.crop.x) <= 1
+      // Validate x, y
+      transforms.crop.x > 0 &&
+      transforms.crop.x <= 1 &&
+      transforms.crop.y > 0 &&
+      transforms.crop.y <= 1;
+
+    if (validCrop) {
+      // No mutating!
+      transforms.crop = _.extend({}, transforms.crop);
+      transforms.crop.height = Math.round(metadata.height * transforms.crop.height);
+      transforms.crop.width = Math.round(metadata.width * transforms.crop.width);
+      transforms.crop.x = Math.round(metadata.width * transforms.crop.x);
+      transforms.crop.y = Math.round(metadata.height * transforms.crop.y);
+    } else {
+      delete transforms.crop;
+    }
+  }
+
+  return transforms;
 }
 
 /**
  * @param {sharp.Sharp} image
  * @param {number} width
  * @param {number} height
- * @returns {Promise<sharp.Sharp>}
+ * @returns {sharp.Sharp}
  */
 function resize(image, width, height) {
   width = width || undefined;
   height = height || undefined;
   if (!width && !height) {
-    return Promise.resolve(image);
+    return image;
   }
-  return apply(image.resize(width, height, { fit: (!width || !height) ? 'contain' : 'fill' }));
+  return image.resize(width, height, { fit: (!width || !height) ? 'contain' : 'fill' });
 }
 
 /**
@@ -267,7 +322,7 @@ function rotate(image, angle) {
 /**
  * @param {sharp.Sharp} image
  * @param {number} sharpness - -1...1
- * @returns {Promise<sharp.Sharp>}
+ * @returns {sharp.Sharp}
  */
 function sharpen(image, sharpness) {
   let sharpenFactor = 0;
@@ -279,20 +334,4 @@ function sharpen(image, sharpness) {
     sharpenFactor = 0.3 + Math.abs(sharpness) * 5;
     return image.blur(sharpenFactor);
   }
-}
-
-/**
- * @param {sharp.Sharp} image
- * @returns {Promise<sharp.Sharp>}
- */
-function toRaw(image) {
-  return image.raw().toBuffer({ resolveWithObject: true }).then(result => {
-    return sharp(result.data, {
-      raw: {
-        channels: result.info.channels,
-        height: result.info.height,
-        width: result.info.width
-      }
-    });
-  });
 }

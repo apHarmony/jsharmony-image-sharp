@@ -20,7 +20,7 @@ along with this package.  If not, see <http://www.gnu.org/licenses/>.
 var _ = require('lodash');
 var fs = require('fs');
 var sharp = require('sharp');
-const transform = require('./transform.js');
+const transform = require('./image.transform.js');
 sharp.cache(false);
 
 exports = module.exports = {};
@@ -317,17 +317,26 @@ exports.compare = function(src1, src2, options, callback /* (err, isEqual, equal
 
 /**
  * @param {string} src
- * @param {import('./transform').TransformOptions} transforms
- * @param {(error: any, buffer: Buffer | undefined, format: string | undefined) => void} callback
+ * @param {string | undefined} dest - if empty then return a buffer in the callback, otherwise write the image
+ * to the path defined by dest and return no buffer.
+ * @param {string | undefined} format - specify the output format of the image. If empty, the output
+ * format will match the input format.
+ * @param {import('./image.transform').TransformOptions} transforms
+ * @param {(error: any, buffer: Buffer | undefined) => void} callback - buffer will
+ * be empty if `dest` param supplied.
  */
-exports.transform = function(src, transforms, callback) {
-  transform.transform(src, transforms).then(data => {
-    data.sharp.toBuffer((err, buffer) => {
-      if (err) {
-        callback(err, undefined, undefined);
-      } else {
-        callback(undefined, buffer, data.format);
-      }
-    });
+exports.transform = function(src, dest, format, transforms, callback) {
+  transform.transform(src, format, transforms).then(image => {
+    if (dest) {
+      image.toFile(dest, callback);
+    } else {
+      image.toBuffer((err, buffer) => {
+        if (err) {
+          callback(err, undefined, undefined);
+        } else {
+          callback(undefined, buffer);
+        }
+      });
+    }
   });
 }
