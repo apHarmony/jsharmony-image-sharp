@@ -29,21 +29,21 @@ exports.type = 'jsharmony-image-sharp';
 function copyFile(source, target, cb) {
   var cbCalled = false;
   var rd = fs.createReadStream(source);
-  rd.on("error", done);
+  rd.on('error', done);
   var wr = fs.createWriteStream(target);
-  wr.on("error", done);
-  wr.on("close", function (ex) { done(); });
+  wr.on('error', done);
+  wr.on('close', function (ex) { done(); });
   rd.pipe(wr);
   
   function done(err) {
     if (!cbCalled) { if (typeof err == 'undefined') err = null; cb(err); cbCalled = true; }
   }
-};
+}
 
 function execif(cond, apply, f){
   if (cond) apply(f);
   else f();
-};
+}
 
 exports.init = function(callback){
   var img = sharp({
@@ -56,17 +56,17 @@ exports.init = function(callback){
   });
   
   img.toBuffer().then(function(buffer){})
-  .catch(function(err){ return callback(err);})
-  .finally(function(){ return callback(); });
-}
+    .catch(function(err){ return callback(err);})
+    .finally(function(){ return callback(); });
+};
 
 exports.driver = function(){
   return sharp;
-}
+};
 
 exports.getDriver = function(cb){
   return cb(null, exports.driver());
-}
+};
 
 exports.resample = function(src, dest, format, callback){
   var img = sharp(src);
@@ -132,7 +132,7 @@ exports.size = function(src, callback){
       height: info.height,
     });
   }).catch(function(err){ return callback(err); });
-}
+};
 
 exports.crop = function(src, dest, destsize, format, callback){
   var img = sharp(src);
@@ -204,7 +204,7 @@ exports.crop = function(src, dest, destsize, format, callback){
       );
     });
   }).catch(function(err){ return callback(err); });
-}
+};
 
 exports.resize = function(src, dest, destsize, format, callback){
   var imgoptions = {};
@@ -281,7 +281,7 @@ exports.resize = function(src, dest, destsize, format, callback){
       });
     });
   }).catch(function(err){ return callback(err); });
-}
+};
 
 exports.compare = function(src1, src2, options, callback /* (err, isEqual, equality) */){
   options = _.extend({

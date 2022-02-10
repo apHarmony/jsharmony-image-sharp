@@ -1,0 +1,1 @@
+call eslint --fix *.js
